@@ -32,15 +32,13 @@
 #include "pawns.h"
 #include "position.h"
 #include "search.h"
+#include "thread_win32.h"
 
 struct Thread;
 
 const size_t MAX_THREADS = 128;
 const size_t MAX_SPLITPOINTS_PER_THREAD = 8;
 const size_t MAX_SLAVES_PER_SPLITPOINT = 4;
-
-#if 0
-/// Spinlock class wraps low level atomic operations to provide a spin lock
 
 class Spinlock {
 
@@ -49,24 +47,13 @@ class Spinlock {
 public:
   Spinlock() { lock = 1; } // Init here to workaround a bug with MSVC 2013
   void acquire() {
-    while (lock.fetch_sub(1, std::memory_order_acquire) != 1)
-        while (lock.load(std::memory_order_relaxed) <= 0) {}
+      while (lock.fetch_sub(1, std::memory_order_acquire) != 1)
+          for (int cnt = 0; lock.load(std::memory_order_relaxed) <= 0; ++cnt)
+              if (cnt >= 10000) std::this_thread::yield(); // Be nice to hyperthreading
   }
   void release() { lock.store(1, std::memory_order_release); }
 };
 
-#else
-
-class Spinlock {
-
-  std::mutex mutex;
-
-public:
-  void acquire() { mutex.lock(); }
-  void release() { mutex.unlock(); }
-};
-
-#endif
 
 /// SplitPoint struct stores information shared by the threads searching in
 /// parallel below the same split point. It is populated at splitting time.
@@ -110,8 +97,9 @@ struct ThreadBase {
   void wait_for(volatile const bool& b);
 
   std::thread nativeThread;
-  std::mutex mutex;
-  std::condition_variable sleepCondition;
+  Mutex mutex;
+  Spinlock spinlock;
+  ConditionVariable sleepCondition;
   volatile bool exit = false;
 };
 
@@ -178,8 +166,7 @@ struct ThreadPool : public std::vector<Thread*> {
   void start_thinking(const Position&, const Search::LimitsType&, Search::StateStackPtr&);
 
   Depth minimumSplitDepth;
-  Spinlock spinlock;
-  std::condition_variable sleepCondition;
+  ConditionVariable sleepCondition;
   TimerThread* timer;
 };
 
