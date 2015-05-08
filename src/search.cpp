@@ -181,6 +181,18 @@ void Search::init() {
 }
 
 
+/// Search::reset() clears all search memory, to restore a deterministic state
+
+void Search::reset () {
+
+    TT.clear();
+    History.clear();
+    CounterMovesHistory.clear();
+    Gains.clear();
+    Countermoves.clear();
+}
+
+
 /// Search::perft() is our utility to verify move generation. All the leaf nodes
 /// up to the given depth are generated and counted and the sum returned.
 template<bool Root>
@@ -339,10 +351,6 @@ namespace {
     beta = VALUE_INFINITE;
 
     TT.new_search();
-    History.clear();
-    CounterMovesHistory.clear();
-    Gains.clear();
-    Countermoves.clear();
 
     size_t multiPV = Options["MultiPV"];
     Skill skill(Options["Skill Level"]);
@@ -960,9 +968,9 @@ moves_loop: // When in check and at SpNode search starts from here
           ss->reduction = reduction<PvNode>(improving, depth, moveCount);
 
           if (   (!PvNode && cutNode)
-              || (  History[pos.piece_on(to_sq(move))][to_sq(move)]
-                  + CounterMovesHistory[pos.piece_on(prevMoveSq)][prevMoveSq]
-                                       [pos.piece_on(to_sq(move))][to_sq(move)] < VALUE_ZERO))
+              || (   History[pos.piece_on(to_sq(move))][to_sq(move)] < VALUE_ZERO
+                  && CounterMovesHistory[pos.piece_on(prevMoveSq)][prevMoveSq]
+                                        [pos.piece_on(to_sq(move))][to_sq(move)] <= VALUE_ZERO))
               ss->reduction += ONE_PLY;
 
           if (move == countermove)
